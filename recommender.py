@@ -3,7 +3,7 @@ from sentence_transformers import SentenceTransformer
 from paper import ArxivPaper
 from datetime import datetime
 
-def rerank_paper(candidate:list[ArxivPaper],corpus:list[dict],model:str='avsolatorio/GIST-small-Embedding-v0', boost_keywords:str=None) -> list[ArxivPaper]:
+def rerank_paper(candidate:list[ArxivPaper],corpus:list[dict],model:str='avsolatorio/GIST-small-Embedding-v0', boost_keywords:str=None, boost_weight:float=5.0) -> list[ArxivPaper]:
     encoder = SentenceTransformer(model)
     
     # Calculate days difference for each paper
@@ -38,8 +38,7 @@ def rerank_paper(candidate:list[ArxivPaper],corpus:list[dict],model:str='avsolat
             max_keyword_scores = keyword_sim.max(axis=1)
             
             # 5. Add weighted score
-            # A coefficient of 5.0 means a strong match (~0.8) adds ~4 points to the score.
-            scores += max_keyword_scores * 5.0
+            scores += max_keyword_scores * boost_weight
     # ------------------------
 
     for s,c in zip(scores,candidate):
