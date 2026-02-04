@@ -20,7 +20,7 @@ class LLM:
         self.model = model
         self.lang = lang
 
-    def generate(self, messages: list[dict], json_output: bool = False, max_tokens: int = 1024) -> str:
+    def generate(self, messages: list[dict], json_output: bool = False, max_tokens: int = 4096) -> str:
         if isinstance(self.llm, OpenAI):
             max_retries = 3
             for attempt in range(max_retries):
