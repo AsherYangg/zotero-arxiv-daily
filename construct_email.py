@@ -150,20 +150,36 @@ def send_email(sender:str, receiver:str, password:str,smtp_server:str,smtp_port:
         name, addr = parseaddr(s)
         return formataddr((Header(name, 'utf-8').encode(), addr))
 
+    # Support multiple receivers (comma-separated)
+    # Clean up: remove newlines, extra spaces, and invalid characters
+    receiver_clean = receiver.replace('\n', ',').replace('\r', ',')
+    receiver_list = []
+    for r in receiver_clean.split(','):
+        r = r.strip()
+        # Remove any angle brackets if present
+        r = r.replace('<', '').replace('>', '')
+        if r and '@' in r:
+            receiver_list.append(r)
+    
+    if not receiver_list:
+        raise ValueError(f"No valid receiver email found in: {receiver}")
+    
+    logger.info(f"Sending to {len(receiver_list)} recipient(s): {receiver_list}")
+    
     msg = MIMEText(html, 'html', 'utf-8')
     msg['From'] = _format_addr('Github Action <%s>' % sender)
-    msg['To'] = _format_addr('You <%s>' % receiver)
+    msg['To'] = ', '.join(receiver_list)
     today = datetime.datetime.now().strftime('%Y/%m/%d')
     msg['Subject'] = Header(f'Daily arXiv {today}', 'utf-8').encode()
 
     try:
-        server = smtplib.SMTP(smtp_server, smtp_port)
+        server = smtplib.SMTP(smtp_server, smtp_port, timeout=60)
         server.starttls()
     except Exception as e:
         logger.warning(f"Failed to use TLS. {e}")
         logger.warning(f"Try to use SSL.")
-        server = smtplib.SMTP_SSL(smtp_server, smtp_port)
+        server = smtplib.SMTP_SSL(smtp_server, smtp_port, timeout=60)
 
     server.login(sender, password)
-    server.sendmail(sender, [receiver], msg.as_string())
+    server.sendmail(sender, receiver_list, msg.as_string())
     server.quit()
