@@ -5,6 +5,7 @@ import arxiv
 import tarfile
 import re
 import time
+import json
 from llm import get_llm
 import requests
 from requests.adapters import HTTPAdapter, Retry
@@ -161,7 +162,7 @@ class ArxivPaper:
         return file_contents
     
     @cached_property
-    def tldr(self) -> str:
+    def tldr(self) -> dict:
         full_content = ""
         if self.tex is not None:
             content = self.tex.get("all")
@@ -186,14 +187,15 @@ class ArxivPaper:
             full_content = content
             
         llm = get_llm()
-        prompt = """Given the full content of a scientific paper in latex format, generate a structured summary in __LANG__ with the following sections:
+        prompt = """Given the full content of a scientific paper in latex format, generate a structured summary in __LANG__.
 
-1. **Motivation**: Why is this problem important? What gap does this paper address?
-2. **Contribution**: What are the main contributions of this paper?
-3. **Method**: What is the proposed approach or method? Describe the key technical details.
-4. **Findings**: What are the key results or discoveries? Include specific numbers if available.
-
-Keep each section to 2-3 sentences. Be concise and informative.
+You must output a JSON object with exactly these four keys:
+{
+    "motivation": "Why is this problem important? What gap does this paper address? ",
+    "contribution": "What are the main contributions of this paper? ",
+    "method": "What is the proposed approach or method? Describe the key technical details. ",
+    "findings": "What are the key results or discoveries? Include specific numbers if available. "
+}
 
 Paper content:
 \\title{__TITLE__}
@@ -213,15 +215,33 @@ __FULL_CONTENT__
         prompt_tokens = prompt_tokens[:64000]  # truncate to 64000 tokens
         prompt = enc.decode(prompt_tokens)
         
-        tldr = llm.generate(
+        response = llm.generate(
             messages=[
                 {
                     "role": "system",
-                    "content": "You are an assistant who perfectly summarizes scientific papers. You extract the key information and present it in a clear, structured format. Always respond in the requested language.",
+                    "content": "You are an assistant who perfectly summarizes scientific papers. Output valid JSON only. Always respond in the requested language.",
                 },
                 {"role": "user", "content": prompt},
-            ]
+            ],
+            json_output=True
         )
+        
+        # Parse JSON response
+        try:
+            tldr = json.loads(response)
+            # Ensure all required keys exist
+            for key in ['motivation', 'contribution', 'method', 'findings']:
+                if key not in tldr:
+                    tldr[key] = ''
+        except json.JSONDecodeError:
+            logger.warning(f"Failed to parse TLDR JSON for {self.arxiv_id}, using raw response")
+            tldr = {
+                'motivation': '',
+                'contribution': '',
+                'method': '',
+                'findings': response
+            }
+        
         return tldr
 
     @cached_property

@@ -20,12 +20,20 @@ class LLM:
         self.model = model
         self.lang = lang
 
-    def generate(self, messages: list[dict]) -> str:
+    def generate(self, messages: list[dict], json_output: bool = False, max_tokens: int = 1024) -> str:
         if isinstance(self.llm, OpenAI):
             max_retries = 3
             for attempt in range(max_retries):
                 try:
-                    response = self.llm.chat.completions.create(messages=messages, temperature=0, model=self.model)
+                    kwargs = {
+                        "messages": messages,
+                        "temperature": 0,
+                        "model": self.model,
+                        "max_tokens": max_tokens
+                    }
+                    if json_output:
+                        kwargs["response_format"] = {"type": "json_object"}
+                    response = self.llm.chat.completions.create(**kwargs)
                     break
                 except Exception as e:
                     logger.error(f"Attempt {attempt + 1} failed: {e}")
@@ -34,7 +42,10 @@ class LLM:
                     sleep(3)
             return response.choices[0].message.content
         else:
-            response = self.llm.create_chat_completion(messages=messages,temperature=0)
+            kwargs = {"messages": messages, "temperature": 0, "max_tokens": max_tokens}
+            if json_output:
+                kwargs["response_format"] = {"type": "json_object"}
+            response = self.llm.create_chat_completion(**kwargs)
             return response["choices"][0]["message"]["content"]
 
 def set_global_llm(api_key: str = None, base_url: str = None, model: str = None, lang: str = "English"):

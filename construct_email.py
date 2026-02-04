@@ -59,8 +59,24 @@ def get_empty_html():
   """
   return block_template
 
-def get_block_html(title:str, authors:str, rate:str,arxiv_id:str, abstract:str, pdf_url:str, code_url:str=None, affiliations:str=None):
+def get_block_html(title:str, authors:str, rate:str,arxiv_id:str, tldr:dict, pdf_url:str, code_url:str=None, affiliations:str=None):
     code = f'<a href="{code_url}" style="display: inline-block; text-decoration: none; font-size: 14px; font-weight: bold; color: #fff; background-color: #5bc0de; padding: 8px 16px; border-radius: 4px; margin-left: 8px;">Code</a>' if code_url else ''
+    
+    # Format TLDR sections
+    if isinstance(tldr, dict):
+        tldr_html = ""
+        labels = {
+            'motivation': '🎯 Motivation',
+            'contribution': '💡 Contribution', 
+            'method': '🔧 Method',
+            'findings': '📊 Findings'
+        }
+        for key in ['motivation', 'contribution', 'method', 'findings']:
+            if tldr.get(key):
+                tldr_html += f'<p style="margin: 4px 0;"><strong>{labels[key]}:</strong> {tldr[key]}</p>'
+    else:
+        tldr_html = f'<p>{tldr}</p>'
+    
     block_template = """
     <table border="0" cellpadding="0" cellspacing="0" width="100%" style="font-family: Arial, sans-serif; border: 1px solid #ddd; border-radius: 8px; padding: 16px; background-color: #f9f9f9;">
     <tr>
@@ -87,7 +103,7 @@ def get_block_html(title:str, authors:str, rate:str,arxiv_id:str, abstract:str, 
     </tr>
     <tr>
         <td style="font-size: 14px; color: #333; padding: 8px 0;">
-            <strong>TLDR:</strong> {abstract}
+            {tldr_html}
         </td>
     </tr>
 
@@ -99,7 +115,7 @@ def get_block_html(title:str, authors:str, rate:str,arxiv_id:str, abstract:str, 
     </tr>
 </table>
 """
-    return block_template.format(title=title, authors=authors,rate=rate,arxiv_id=arxiv_id, abstract=abstract, pdf_url=pdf_url, code=code, affiliations=affiliations)
+    return block_template.format(title=title, authors=authors,rate=rate,arxiv_id=arxiv_id, tldr_html=tldr_html, pdf_url=pdf_url, code=code, affiliations=affiliations)
 
 def get_stars(score:float):
     full_star = '<span class="full-star">⭐</span>'
