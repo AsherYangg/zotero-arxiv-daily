@@ -162,8 +162,7 @@ class ArxivPaper:
     
     @cached_property
     def tldr(self) -> str:
-        introduction = ""
-        conclusion = ""
+        full_content = ""
         if self.tex is not None:
             content = self.tex.get("all")
             if content is None:
@@ -174,40 +173,44 @@ class ArxivPaper:
             content = re.sub(r'\\begin\{figure\}.*?\\end\{figure\}', '', content, flags=re.DOTALL)
             #remove table
             content = re.sub(r'\\begin\{table\}.*?\\end\{table\}', '', content, flags=re.DOTALL)
-            #find introduction and conclusion
-            # end word can be \section or \end{document} or \bibliography or \appendix
-            match = re.search(r'\\section\{Introduction\}.*?(\\section|\\end\{document\}|\\bibliography|\\appendix|$)', content, flags=re.DOTALL)
-            if match:
-                introduction = match.group(0)
-            match = re.search(r'\\section\{Conclusion\}.*?(\\section|\\end\{document\}|\\bibliography|\\appendix|$)', content, flags=re.DOTALL)
-            if match:
-                conclusion = match.group(0)
+            #remove algorithm
+            content = re.sub(r'\\begin\{algorithm\}.*?\\end\{algorithm\}', '', content, flags=re.DOTALL)
+            #remove equation blocks (keep inline math)
+            content = re.sub(r'\\begin\{equation\*?\}.*?\\end\{equation\*?\}', '[EQUATION]', content, flags=re.DOTALL)
+            content = re.sub(r'\\begin\{align\*?\}.*?\\end\{align\*?\}', '[EQUATION]', content, flags=re.DOTALL)
+            #remove bibliography
+            content = re.sub(r'\\bibliography\{.*?\}', '', content)
+            content = re.sub(r'\\begin\{thebibliography\}.*?\\end\{thebibliography\}', '', content, flags=re.DOTALL)
+            #remove appendix
+            content = re.sub(r'\\appendix.*$', '', content, flags=re.DOTALL)
+            full_content = content
+            
         llm = get_llm()
-        prompt = """Given the title, abstract, introduction and the conclusion (if any) of a paper in latex format, generate a structured summary in __LANG__ with the following sections:
+        prompt = """Given the full content of a scientific paper in latex format, generate a structured summary in __LANG__ with the following sections:
 
 1. **Motivation**: Why is this problem important? What gap does this paper address?
 2. **Contribution**: What are the main contributions of this paper?
-3. **Method**: What is the proposed approach or method?
-4. **Findings**: What are the key results or discoveries?
+3. **Method**: What is the proposed approach or method? Describe the key technical details.
+4. **Findings**: What are the key results or discoveries? Include specific numbers if available.
 
-Keep each section to 1-2 sentences. Be concise and informative.
+Keep each section to 2-3 sentences. Be concise and informative.
 
 Paper content:
 \\title{__TITLE__}
 \\begin{abstract}__ABSTRACT__\\end{abstract}
-__INTRODUCTION__
-__CONCLUSION__
+
+__FULL_CONTENT__
 """
         prompt = prompt.replace('__LANG__', llm.lang)
         prompt = prompt.replace('__TITLE__', self.title)
         prompt = prompt.replace('__ABSTRACT__', self.summary)
-        prompt = prompt.replace('__INTRODUCTION__', introduction)
-        prompt = prompt.replace('__CONCLUSION__', conclusion)
+        prompt = prompt.replace('__FULL_CONTENT__', full_content)
 
-        # use gpt-4o tokenizer for estimation
+        # use gpt-4o tokenizer for estimation (works for most models)
+        # DeepSeek R1 supports 128K context, set limit to 64K for safety
         enc = tiktoken.encoding_for_model("gpt-4o")
         prompt_tokens = enc.encode(prompt)
-        prompt_tokens = prompt_tokens[:4000]  # truncate to 4000 tokens
+        prompt_tokens = prompt_tokens[:64000]  # truncate to 64000 tokens
         prompt = enc.decode(prompt_tokens)
         
         tldr = llm.generate(
