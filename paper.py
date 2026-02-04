@@ -183,13 +183,21 @@ class ArxivPaper:
             if match:
                 conclusion = match.group(0)
         llm = get_llm()
-        prompt = """Given the title, abstract, introduction and the conclusion (if any) of a paper in latex format, generate a one-sentence TLDR summary in __LANG__:
-        
-        \\title{__TITLE__}
-        \\begin{abstract}__ABSTRACT__\\end{abstract}
-        __INTRODUCTION__
-        __CONCLUSION__
-        """
+        prompt = """Given the title, abstract, introduction and the conclusion (if any) of a paper in latex format, generate a structured summary in __LANG__ with the following sections:
+
+1. **Motivation**: Why is this problem important? What gap does this paper address?
+2. **Contribution**: What are the main contributions of this paper?
+3. **Method**: What is the proposed approach or method?
+4. **Findings**: What are the key results or discoveries?
+
+Keep each section to 1-2 sentences. Be concise and informative.
+
+Paper content:
+\\title{__TITLE__}
+\\begin{abstract}__ABSTRACT__\\end{abstract}
+__INTRODUCTION__
+__CONCLUSION__
+"""
         prompt = prompt.replace('__LANG__', llm.lang)
         prompt = prompt.replace('__TITLE__', self.title)
         prompt = prompt.replace('__ABSTRACT__', self.summary)
@@ -206,7 +214,7 @@ class ArxivPaper:
             messages=[
                 {
                     "role": "system",
-                    "content": "You are an assistant who perfectly summarizes scientific paper, and gives the core idea of the paper to the user.",
+                    "content": "You are an assistant who perfectly summarizes scientific papers. You extract the key information and present it in a clear, structured format. Always respond in the requested language.",
                 },
                 {"role": "user", "content": prompt},
             ]
