@@ -22,24 +22,42 @@ def rerank_paper(candidate:list[ArxivPaper],corpus:list[dict],model:str='avsolat
     candidate_feature = encoder.encode([paper.summary for paper in candidate])
     sim = encoder.similarity(candidate_feature,corpus_feature) # [n_candidate, n_corpus]
     scores = (sim * time_decay_weight).sum(axis=1) * 10 # [n_candidate]
+    
+    # Convert to numpy array for consistent operations
+    scores = np.array(scores, dtype=np.float32)
 
     # --- Keyword Boosting ---
     if boost_keywords:
         # 1. Parse keywords
         keywords = [k.strip() for k in boost_keywords.split(',') if k.strip()]
         if keywords:
-            # 2. Compute keyword embeddings
+            # 2. Ensure boost_weight is float (env vars are strings)
+            boost_weight = float(boost_weight)
+            
+            # 3. Compute candidate embeddings using Title + Abstract for better keyword matching
+            candidate_text = [f"{paper.title}. {paper.summary}" for paper in candidate]
+            candidate_keyword_feature = encoder.encode(candidate_text)
+            
+            # 4. Compute keyword embeddings
             keyword_features = encoder.encode(keywords)
             
-            # 3. Compute similarity: [n_candidate, n_keywords]
-            keyword_sim = encoder.similarity(candidate_feature, keyword_features)
+            # 5. Compute similarity: [n_candidate, n_keywords]
+            keyword_sim = encoder.similarity(candidate_keyword_feature, keyword_features)
             
-            # 4. Take max similarity (match any keyword)
+            # 6. Take max similarity (match any keyword)
             # encoder.similarity returns a Tensor. .max(dim=1) returns (values, indices)
             max_keyword_scores = keyword_sim.max(dim=1).values
+            max_keyword_scores = np.array(max_keyword_scores, dtype=np.float32)
             
-            # 5. Add weighted score
-            scores += max_keyword_scores * boost_weight
+            # 7. Apply sigmoid scaling to prevent boost from overwhelming original ranking
+            # sigmoid((sim - 0.5) * 10) maps:
+            #   sim=0.3 -> ~0.12, sim=0.5 -> 0.5, sim=0.7 -> ~0.88, sim=0.8 -> ~0.95
+            # This ensures smooth transition and caps the maximum boost at boost_weight
+            scaled_boost = 1 / (1 + np.exp(-10 * (max_keyword_scores - 0.5)))
+            
+            # 8. Clamp to [0, 1] for safety, then apply weight
+            scaled_boost = np.clip(scaled_boost, 0, 1)
+            scores += scaled_boost * boost_weight
     # ------------------------
 
     for s,c in zip(scores,candidate):
