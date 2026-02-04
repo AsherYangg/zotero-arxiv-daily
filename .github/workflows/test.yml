@@ -35,5 +35,7 @@ jobs:
           OPENAI_API_BASE: ${{ secrets.OPENAI_API_BASE }}
           MODEL_NAME: ${{ secrets.MODEL_NAME }}
           LANGUAGE: ${{ vars.LANGUAGE }}
+          BOOST_KEYWORDS: ${{ vars.BOOST_KEYWORDS }}
+          BOOST_WEIGHT: ${{ vars.BOOST_WEIGHT }}
         run: |
           uv run main.py --debug
