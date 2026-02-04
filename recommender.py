@@ -35,7 +35,8 @@ def rerank_paper(candidate:list[ArxivPaper],corpus:list[dict],model:str='avsolat
             keyword_sim = encoder.similarity(candidate_feature, keyword_features)
             
             # 4. Take max similarity (match any keyword)
-            max_keyword_scores = keyword_sim.max(axis=1)
+            # encoder.similarity returns a Tensor. .max(dim=1) returns (values, indices)
+            max_keyword_scores = keyword_sim.max(dim=1).values
             
             # 5. Add weighted score
             scores += max_keyword_scores * boost_weight
