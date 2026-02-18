@@ -61,7 +61,12 @@ def filter_corpus(corpus:list[dict], pattern:str) -> list[dict]:
 
 
 def get_arxiv_paper(query:str, debug:bool=False) -> list[ArxivPaper]:
-    client = arxiv.Client(num_retries=10,delay_seconds=10)
+    import time
+    import random
+    from urllib.error import HTTPError
+    
+    # More conservative settings for GitHub Actions
+    client = arxiv.Client(num_retries=5, delay_seconds=10)
     feed = feedparser.parse(f"https://rss.arxiv.org/atom/{query}")
     if 'Feed error for query' in feed.feed.title:
         raise Exception(f"Invalid ARXIV_QUERY: {query}.")
@@ -69,11 +74,39 @@ def get_arxiv_paper(query:str, debug:bool=False) -> list[ArxivPaper]:
         papers = []
         all_paper_ids = [i.id.removeprefix("oai:arXiv.org:") for i in feed.entries if i.arxiv_announce_type == 'new']
         bar = tqdm(total=len(all_paper_ids),desc="Retrieving Arxiv papers")
-        for i in range(0,len(all_paper_ids),20):
-            search = arxiv.Search(id_list=all_paper_ids[i:i+20])
-            batch = [ArxivPaper(p) for p in client.results(search)]
-            bar.update(len(batch))
-            papers.extend(batch)
+        
+        # Process in smaller batches with delays
+        batch_size = 10  # Smaller batch size
+        for i in range(0, len(all_paper_ids), batch_size):
+            batch_ids = all_paper_ids[i:i+batch_size]
+            search = arxiv.Search(id_list=batch_ids)
+            
+            # Retry with exponential backoff for 429 errors
+            max_retries = 5
+            for attempt in range(max_retries):
+                try:
+                    batch = [ArxivPaper(p) for p in client.results(search)]
+                    bar.update(len(batch))
+                    papers.extend(batch)
+                    break
+                except Exception as e:
+                    error_str = str(e)
+                    if '429' in error_str or 'Too Many Requests' in error_str:
+                        wait_time = (2 ** attempt) * 10 + random.uniform(0, 5)  # Exponential backoff
+                        logger.warning(f"Rate limited (429). Waiting {wait_time:.1f}s before retry {attempt + 1}/{max_retries}")
+                        time.sleep(wait_time)
+                        if attempt == max_retries - 1:
+                            logger.error(f"Failed to fetch batch after {max_retries} retries")
+                            raise
+                    else:
+                        logger.error(f"Error fetching batch: {e}")
+                        raise
+            
+            # Sleep between batches to avoid rate limiting
+            if i + batch_size < len(all_paper_ids):
+                sleep_time = 3 + random.uniform(0, 2)  # 3-5 seconds between batches
+                time.sleep(sleep_time)
+        
         bar.close()
 
     else:
